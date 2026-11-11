@@ -184,7 +184,6 @@ private:
         const Estimate fused = fuse({flow, horizon_estimate});
         _performance_monitor->stop();
         publish(fused);
-        log(fused, flow, horizon_estimate);
 
         if (_plot)
         {
@@ -221,22 +220,6 @@ private:
         }
 
         _publisher->publish(message);
-    }
-
-    void log(const Estimate& fused, const Estimate& flow, const Estimate& horizon)
-    {
-        if (!fused.valid)
-        {
-            return;
-        }
-
-        const auto describe = [](const Estimate& e)
-        {
-            return e.valid ? cv::format("%.0f ± %.1f", static_cast<double>(e.delay) / 1e6, e.sd / 1e6) : std::string("-");
-        };
-
-        RCLCPP_INFO(get_logger(), "delay %.1f ± %.1f ms (flow %s, horizon %s)",
-            static_cast<double>(fused.delay) / 1e6, fused.sd / 1e6, describe(flow).c_str(), describe(horizon).c_str());
     }
 };
 
