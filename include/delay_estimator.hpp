@@ -17,6 +17,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <format>
 #include <memory>
 #include <optional>
 #include <string>
@@ -81,6 +82,8 @@ public:
             declare_parameter<std::string>("delay.topic", "/delay_estimator/delay"), 
             rclcpp::ServicesQoS());
 
+        _debug = declare_parameter<bool>("delay.debug", false);
+
         if (declare_parameter<bool>("delay.debug_view", false))
         {
             _plot.emplace(cv::Size(640, 320));
@@ -124,6 +127,7 @@ public:
 private:
     std::size_t _features_size = 0;
     std::size_t _horizon_size = 0;
+    bool _debug = false;
     
     std::shared_ptr<AttitudeReceiver> _attitude;
     std::shared_ptr<LocalPositionReceiver> _position;
@@ -154,11 +158,19 @@ private:
         std::vector<Horizon> horizon = _horizon->snapshot();
         const bool flow_ready = features.size() >= _features_size && !attitude.empty() && !position.empty();
         const bool horizon_ready = horizon.size() >= _horizon_size && !attitude.empty();
+        const std::string flow_waiting = std::format("waiting for data (pairs {}/{}, attitude {}, position {})", features.size(), _features_size, attitude.size(), position.size());
+        const std::string horizon_waiting = std::format("waiting for data (horizons {}/{}, attitude {})", horizon.size(), _horizon_size, attitude.size());
 
         if (!flow_ready && !horizon_ready)
         {
             publish(Estimate{});
             _performance_monitor->stop();
+
+            if (_debug)
+            {
+                RCLCPP_WARN(get_logger(), "no delay: flow %s; horizon %s", flow_waiting.c_str(), horizon_waiting.c_str());
+            }
+
             return;
         }
 
@@ -168,7 +180,6 @@ private:
         SearchResult<int64_t, double> horizon_result;
         Estimate flow;
         Estimate horizon_estimate;
-
         if (flow_ready)
         {
             flow_result = _search.run([&](int64_t delay_ns) { return _flow_method->fit(synchronizer.get_flow(delay_ns)); });
@@ -185,12 +196,50 @@ private:
         _performance_monitor->stop();
         publish(fused);
 
+        if (_debug)
+        {
+            const std::string details = std::format(
+                "flow {}; horizon {}",
+                flow_ready ? describe(flow_result, flow) : flow_waiting,
+                horizon_ready ? describe(horizon_result, horizon_estimate) : horizon_waiting);
+
+            if (fused.valid)
+            {
+                RCLCPP_INFO(get_logger(), "delay %.1f ± %.1f ms: %s", static_cast<double>(fused.delay) * 1e-6, fused.sd * 1e-6, details.c_str());
+            }
+            else
+            {
+                RCLCPP_WARN(get_logger(), "no delay: %s", details.c_str());
+            }
+        }
+
         if (_plot)
         {
             plot("flow", flow_result);
             plot("horizon", horizon_result);
             _plot->draw();
         }
+    }
+
+    static std::string describe(const SearchResult<int64_t, double>& result, const Estimate& estimate)
+    {
+        const std::size_t valid = static_cast<std::size_t>(std::count_if(
+            result.evaluations.begin(),
+            result.evaluations.end(),
+            [](const auto& evaluation) { return std::isfinite(evaluation.second); }));
+        const std::string search = std::format(
+            "best {:.0f} ms, J {:.3g}, {}/{} delays fitted",
+            static_cast<double>(result.value) * 1e-6,
+            result.cost,
+            valid,
+            result.evaluations.size());
+
+        if (!estimate.valid)
+        {
+            return std::format("invalid ({})", search);
+        }
+
+        return std::format("{:.1f} ± {:.1f} ms ({})", static_cast<double>(estimate.delay) * 1e-6, estimate.sd * 1e-6, search);
     }
 
     void plot(const std::string& name, const SearchResult<int64_t, double>& result)
