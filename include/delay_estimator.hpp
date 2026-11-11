@@ -20,6 +20,7 @@
 #include <format>
 #include <memory>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <thread>
 #include <utility>
@@ -92,10 +93,14 @@ public:
                 static_cast<double>(search.max) * 1e-6,
                 0.0,
                 std::max(_flow_method->max_cost(), _horizon_method->max_cost()));
-            _plot_group = create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive, false);
-            _plot_timer = create_wall_timer(std::chrono::milliseconds(30), [this]() { _plot->show(); }, _plot_group);
-            _plot_executor.add_callback_group(_plot_group, get_node_base_interface());
-            _plot_thread = std::thread([this]() { _plot_executor.spin(); });
+            _plot_thread = std::jthread([this](std::stop_token stop)
+            {
+                while (!stop.stop_requested())
+                {
+                    _plot->show();
+                    std::this_thread::sleep_for(std::chrono::milliseconds(30));
+                }
+            });
         }
 
         const std::string performance_topic = declare_parameter<std::string>("delay.performance_topic", "/performance/delay_estimator");
@@ -108,15 +113,6 @@ public:
         _timer = create_wall_timer(
             std::chrono::milliseconds(declare_parameter<int>("delay.update_ms", 1000)),
             [this]() { update(); });
-    }
-
-    ~DelayEstimator() override
-    {
-        if (_plot_thread.joinable())
-        {
-            _plot_executor.cancel();
-            _plot_thread.join();
-        }
     }
 
     std::vector<rclcpp::Node::SharedPtr> children() const
@@ -142,10 +138,7 @@ private:
     rclcpp::Publisher<ifc_msgs::msg::Delay>::SharedPtr _publisher;
 
     std::optional<SearchPlot> _plot;
-    rclcpp::CallbackGroup::SharedPtr _plot_group;
-    rclcpp::TimerBase::SharedPtr _plot_timer;
-    rclcpp::executors::SingleThreadedExecutor _plot_executor;
-    std::thread _plot_thread;
+    std::jthread _plot_thread;
 
     std::shared_ptr<ifc_tools::PerformanceMonitor> _performance_monitor;
 
