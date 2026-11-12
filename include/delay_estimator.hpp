@@ -4,9 +4,12 @@
 #include <debug.hpp>
 #include <estimation/fusion.hpp>
 #include <estimation/grid_search.hpp>
-#include <ifc_tools/buffered_receiver.hpp>
-#include <ifc_tools/performance_monitor.hpp>
-#include <input/horizon.hpp>
+#include <ifc_tools/common/performance_monitor.hpp>
+#include <ifc_tools/msg/features.hpp>
+#include <ifc_tools/msg/horizon.hpp>
+#include <ifc_tools/msg/vehicle_attitude.hpp>
+#include <ifc_tools/msg/vehicle_local_position.hpp>
+#include <ifc_tools/receiver/buffered_receiver.hpp>
 #include <method/flow_method.hpp>
 #include <method/horizon_method.hpp>
 
@@ -49,28 +52,28 @@ public:
         _features_size = static_cast<std::size_t>(declare_parameter<int>("delay_estimator.feature_buffer_size", 300));
         _horizon_size = static_cast<std::size_t>(declare_parameter<int>("delay_estimator.horizon_buffer_size", 300));
 
-        _attitude = std::make_shared<AttitudeReceiver>(
+        _attitude = std::make_shared<ifc_tools::VehicleAttitudeReceiver>(
             "delay_estimator_attitude",
-            std::make_shared<AttitudeUtils>(),
+            std::make_shared<ifc_tools::VehicleAttitudeUtils>(),
             static_cast<std::size_t>(declare_parameter<int>("delay_estimator.attitude_buffer_size", 4000)),
             declare_parameter<std::string>("autopilot.vehicle_attitude", "/fmu/out/vehicle_attitude"));
 
-        _position = std::make_shared<LocalPositionReceiver>(
+        _position = std::make_shared<ifc_tools::VehicleLocalPositionReceiver>(
             "delay_estimator_local_position",
-            std::make_shared<LocalPositionUtils>(),
+            std::make_shared<ifc_tools::VehicleLocalPositionUtils>(),
             static_cast<std::size_t>(declare_parameter<int>("delay_estimator.local_position_buffer_size", 2000)),
             declare_parameter<std::string>("autopilot.vehicle_local_position", "/fmu/out/vehicle_local_position"));
 
-        _features = std::make_shared<FeaturesReceiver>(
+        _features = std::make_shared<ifc_tools::FeaturesReceiver>(
             "delay_estimator_features",
-            std::make_shared<FeaturesUtils>(),
+            std::make_shared<ifc_tools::FeaturesUtils>(),
             _features_size,
             declare_parameter<std::string>("feature_tracker.topic", "/feature_tracker/features"),
             rclcpp::ServicesQoS());
 
-        _horizon = std::make_shared<HorizonReceiver>(
+        _horizon = std::make_shared<ifc_tools::HorizonReceiver>(
             "delay_estimator_horizon",
-            std::make_shared<HorizonUtils>(),
+            std::make_shared<ifc_tools::HorizonUtils>(),
             _horizon_size,
             declare_parameter<std::string>("horizon_detection.topic", "/horizon_detection/horizon"),
             rclcpp::ServicesQoS());
@@ -121,10 +124,10 @@ private:
     std::size_t _horizon_size = 0;
     bool _debug = false;
     
-    std::shared_ptr<AttitudeReceiver> _attitude;
-    std::shared_ptr<LocalPositionReceiver> _position;
-    std::shared_ptr<FeaturesReceiver> _features;
-    std::shared_ptr<HorizonReceiver> _horizon;
+    std::shared_ptr<ifc_tools::VehicleAttitudeReceiver> _attitude;
+    std::shared_ptr<ifc_tools::VehicleLocalPositionReceiver> _position;
+    std::shared_ptr<ifc_tools::FeaturesReceiver> _features;
+    std::shared_ptr<ifc_tools::HorizonReceiver> _horizon;
 
     rclcpp::TimerBase::SharedPtr _timer;
     GridSearch<int64_t, double> _search;
@@ -141,10 +144,10 @@ private:
     void update()
     {
         _performance_monitor->start();
-        std::vector<Attitude> attitude = _attitude->snapshot();
-        std::vector<LocalPosition> position = _position->snapshot();
-        std::vector<Features> features = _features->snapshot();
-        std::vector<Horizon> horizon = _horizon->snapshot();
+        std::vector<ifc_tools::VehicleAttitude> attitude = _attitude->snapshot();
+        std::vector<ifc_tools::VehicleLocalPosition> position = _position->snapshot();
+        std::vector<ifc_tools::Features> features = _features->snapshot();
+        std::vector<ifc_tools::Horizon> horizon = _horizon->snapshot();
         const bool flow_ready = features.size() >= _features_size && !attitude.empty() && !position.empty();
         const bool horizon_ready = horizon.size() >= _horizon_size && !attitude.empty();
         const std::string flow_waiting = std::format("waiting for data (pairs {}/{}, attitude {}, position {})", features.size(), _features_size, attitude.size(), position.size());

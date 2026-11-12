@@ -178,7 +178,7 @@ private:
         return 0.5 * rho[0];
     }
 
-    static Eigen::Vector3d gravity(const Attitude& attitude)
+    static Eigen::Vector3d gravity(const ifc_tools::VehicleAttitude& attitude)
     {
         static const Eigen::Matrix3d nominal = (Eigen::Matrix3d() << 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0).finished();
         return nominal * (attitude.q.conjugate() * Eigen::Vector3d::UnitZ());

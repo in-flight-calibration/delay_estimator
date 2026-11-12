@@ -1,4 +1,4 @@
-#include <input/attitude.hpp>
+#include <ifc_tools/msg/vehicle_attitude.hpp>
 
 #include <algorithm>
 #include <cstdio>
@@ -27,13 +27,12 @@ Eigen::Quaterniond rotation(double t)
 
 int main()
 {
-    using delay_estimator::Attitude;
-    using delay_estimator::AttitudeUtils;
-    const AttitudeUtils slerp;
+    using ifc_tools::VehicleAttitude;
+    const ifc_tools::VehicleAttitudeUtils slerp;
     bool ok = true;
     const int64_t step = 5'000'000;
 
-    std::vector<Attitude> samples;
+    std::vector<VehicleAttitude> samples;
 
     for (int i = 0; i <= 400; ++i)
     {

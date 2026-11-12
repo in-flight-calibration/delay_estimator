@@ -65,8 +65,8 @@ delay_estimator::SearchResult<int64_t, double> simulate(AttitudeFunction attitud
 {
     using namespace delay_estimator;
 
-    std::vector<Attitude> attitude_samples;
-    std::vector<LocalPosition> position_samples;
+    std::vector<ifc_tools::VehicleAttitude> attitude_samples;
+    std::vector<ifc_tools::VehicleLocalPosition> position_samples;
 
     for (int i = 0; i <= 1600; ++i)
     {
@@ -88,7 +88,7 @@ delay_estimator::SearchResult<int64_t, double> simulate(AttitudeFunction attitud
     std::uniform_real_distribution<double> v(0.55 * height, height);
     std::uniform_real_distribution<double> depth(min_depth, max_depth);
     std::normal_distribution<double> noise(0.0, 0.5);
-    std::vector<Features> pairs;
+    std::vector<ifc_tools::Features> pairs;
     const double frame = 1.0 / 30.0;
 
     for (int n = 0; n < 150; ++n)
@@ -132,7 +132,7 @@ delay_estimator::SearchResult<int64_t, double> simulate(AttitudeFunction attitud
 
         if (!affine.empty())
         {
-            Features pair;
+            ifc_tools::Features pair;
             pair.timestamp = {std::llround(t1 * 1e9), std::llround(t2 * 1e9)};
             pair.A << affine.at<double>(0, 0), affine.at<double>(0, 1), affine.at<double>(1, 0), affine.at<double>(1, 1);
             pair.b << affine.at<double>(0, 2), affine.at<double>(1, 2);
@@ -159,7 +159,7 @@ delay_estimator::SearchResult<int64_t, double> simulate_horizon(AttitudeFunction
 {
     using namespace delay_estimator;
 
-    std::vector<Attitude> attitude_samples;
+    std::vector<ifc_tools::VehicleAttitude> attitude_samples;
 
     for (int i = 0; i <= 2600; ++i)
     {
@@ -178,7 +178,7 @@ delay_estimator::SearchResult<int64_t, double> simulate_horizon(AttitudeFunction
     std::mt19937 rng(5);
     std::normal_distribution<double> theta_noise(0.0, 0.2 * M_PI / 180.0);
     std::normal_distribution<double> rho_noise(0.0, 0.002);
-    std::vector<Horizon> horizons;
+    std::vector<ifc_tools::Horizon> horizons;
 
     for (int n = 0; n < 300; ++n)
     {
@@ -261,15 +261,14 @@ int main(int argc, char* argv[])
         message.affine[i] = static_cast<float>(affine.val[i]);
     }
 
-    const auto decoded = delay_estimator::FeaturesUtils().convert(message);
+    const auto decoded = ifc_tools::FeaturesUtils().convert(message);
     const cv::Vec2d expected = affine * cv::Vec3d(0.3, -0.7, 1.0);
     const Eigen::Vector2d mapped = decoded->A * Eigen::Vector2d(0.3, -0.7) + decoded->b;
     ok &= check(decoded && std::abs(mapped.x() - expected[0]) < 1e-6 && std::abs(mapped.y() - expected[1]) < 1e-6,
         "affine message decodes to x2 = A * x1 + b");
 
     {
-        using delay_estimator::Attitude;
-        std::vector<Attitude> attitude;
+        std::vector<ifc_tools::VehicleAttitude> attitude;
 
         for (int i = 0; i <= 100; ++i)
         {
@@ -284,6 +283,28 @@ int main(int argc, char* argv[])
         ok &= check(horizon.size() == 2 && horizon[0].attitude.timestamp == 500'000'000
             && horizon[0].attitude.q.angularDistance(excited(0.3)) < 1e-9,
             "horizon attitude is interpolated at the shifted time and stamped with the horizon time");
+    }
+
+    {
+        std::vector<ifc_tools::VehicleAttitude> attitude;
+        std::vector<ifc_tools::VehicleLocalPosition> position;
+
+        for (int i = 0; i <= 100; ++i)
+        {
+            attitude.push_back({i * 10'000'000LL, excited(i * 0.01)});
+            position.push_back({i * 10'000'000LL, Eigen::Vector3d::Constant(i)});
+        }
+
+        position[50].position.x() = std::numeric_limits<double>::quiet_NaN();
+        ifc_tools::Features valid;
+        valid.timestamp = {100'000'000, 200'000'000};
+        ifc_tools::Features invalid;
+        invalid.timestamp = {450'000'000, 500'000'000};
+
+        const delay_estimator::SampleSynchronizer synchronizer({valid, invalid}, {}, std::move(attitude), std::move(position));
+        const auto flow = synchronizer.get_flow(0);
+        ok &= check(flow.size() == 1 && flow[0].features.timestamp[0] == 100'000'000,
+            "flow pairs with non-finite position are dropped");
     }
 
     const auto horizonResult = simulate_horizon(excited, -0.137);

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ifc_tools/interpolator.hpp>
+#include <ifc_tools/processing/interpolator.hpp>
 
 #include <cstddef>
 #include <cstdint>

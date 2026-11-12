@@ -211,7 +211,7 @@ private:
         const Eigen::Quaterniond& q1 = sample.attitude[0].q;
         const Eigen::AngleAxisd rotation(q1.conjugate() * sample.attitude[1].q);
         FlowRegressor phi;
-        phi << rotation.angle() * rotation.axis(), q1.conjugate() * (sample.position[1].p - sample.position[0].p);
+        phi << rotation.angle() * rotation.axis(), q1.conjugate() * (sample.local_position[1].position - sample.local_position[0].position);
         return phi;
     }
 
