@@ -145,7 +145,13 @@ delay_estimator::SearchResult<int64_t, double> simulate(AttitudeFunction attitud
     search.setParameters({-500'000'000, 0, {50'000'000, 10'000'000, 2'000'000}});
     const SampleSynchronizer synchronizer(std::move(pairs), {}, std::move(attitude_samples), std::move(position_samples));
 
-    return search.run([&](int64_t delay_ns) { return method.fit(synchronizer.get_flow(delay_ns)); });
+    return search.run(
+        [&](int64_t delay_ns) -> Evaluation<double>
+        {
+            const std::vector<FlowSample> samples = synchronizer.get_flow(delay_ns);
+            return {samples.size(), method.fit(samples)};
+        },
+        [&](std::size_t samples) { return method.degrees_of_freedom(samples); });
 }
 
 template <typename AttitudeFunction>
@@ -211,7 +217,13 @@ delay_estimator::SearchResult<int64_t, double> simulate_horizon(AttitudeFunction
     search.setParameters({-500'000'000, 0, {50'000'000, 10'000'000, 2'000'000}});
     const SampleSynchronizer synchronizer({}, std::move(horizons), std::move(attitude_samples), {});
 
-    return search.run([&](int64_t delay_ns) { return method.fit(synchronizer.get_horizon(delay_ns)); });
+    return search.run(
+        [&](int64_t delay_ns) -> Evaluation<double>
+        {
+            const std::vector<HorizonSample> samples = synchronizer.get_horizon(delay_ns);
+            return {samples.size(), method.fit(samples)};
+        },
+        [&](std::size_t samples) { return method.degrees_of_freedom(samples); });
 }
 
 }
@@ -293,12 +305,15 @@ int main(int argc, char* argv[])
             parabola.evaluations.emplace_back(d, 0.5 + 0.04 * x * x);
         }
 
-        const auto curvature = delay_estimator::estimate(parabola, 5, 2);
+        parabola.evaluations.insert(parabola.evaluations.begin(), {-75, 10.0});
+        parabola.evaluations.emplace_back(-25, 10.0);
+        parabola.degrees_of_freedom = 2;
+        const auto curvature = delay_estimator::estimate(parabola);
         ok &= check(curvature.valid && curvature.delay == -52 && std::abs(curvature.sd - 2.5) < 1e-9,
-            "delay is the parabola vertex and sd = sqrt(minimum / (dof * curvature))");
+            "delay is the parabola vertex over the finest-step window and sd = sqrt(minimum / (dof * curvature))");
 
         parabola.cost = std::numeric_limits<double>::quiet_NaN();
-        ok &= check(!delay_estimator::estimate(parabola, 5, 2).valid, "invalid minimum gives no estimate");
+        ok &= check(!delay_estimator::estimate(parabola).valid, "invalid minimum gives no estimate");
 
         const auto fused = delay_estimator::fuse({{true, -40, 4.0}, {true, -60, 3.0}, {false, 0, 0.0}});
         ok &= check(fused.valid && fused.delay == std::llround((-40.0 / 16.0 - 60.0 / 9.0) / (1.0 / 16.0 + 1.0 / 9.0)) && std::abs(fused.sd - 2.4) < 1e-9,
@@ -309,7 +324,9 @@ int main(int argc, char* argv[])
     {
         delay_estimator::GridSearch<int64_t, int> search;
         search.setParameters({-500, 0, {20, 5, 1}, 8});
-        const auto result = search.run([](int64_t value) { return static_cast<int>(std::abs(value + 137)); });
+        const auto result = search.run(
+            [](int64_t value) { return delay_estimator::Evaluation<int> {static_cast<std::size_t>(-value), static_cast<int>(std::abs(value + 137))}; },
+            [](std::size_t samples) { return samples; });
         bool neighbours = true;
 
         for (int64_t value = -145; value <= -129; ++value)
@@ -320,6 +337,7 @@ int main(int argc, char* argv[])
 
         ok &= check(result.value == -137 && result.cost == 0 && neighbours && std::is_sorted(result.evaluations.begin(), result.evaluations.end()),
             "neighbours of the best value are evaluated on the finest step");
+        ok &= check(result.degrees_of_freedom == 137, "degrees of freedom are computed from the data of the best value");
     }
 
     const auto throwsFor = [](const std::vector<int64_t>& steps)

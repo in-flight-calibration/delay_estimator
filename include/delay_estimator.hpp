@@ -39,14 +39,10 @@ public:
           _performance_monitor(std::make_shared<ifc_tools::PerformanceMonitor>("delay_estimator"))
     {
         SearchParameters<int64_t> search;
-        search.min = -declare_parameter<int>("delay_estimator.search.max_delay_ms", 500) * 1'000'000LL;
+        search.min = -declare_parameter<int64_t>("delay_estimator.search.max_delay_ns", 500'000'000);
         search.max = 0;
         search.neighbours = static_cast<std::size_t>(declare_parameter<int>("delay_estimator.search.neighbours", 5));
-
-        for (const int64_t step : declare_parameter<std::vector<int64_t>>("delay_estimator.search.steps_ms", {20, 5, 1}))
-        {
-            search.steps.push_back(step * 1'000'000LL);
-        }
+        search.steps = declare_parameter<std::vector<int64_t>>("delay_estimator.search.steps_ns", {20'000'000, 5'000'000, 1'000'000});
 
         _search.setParameters(search);
 
@@ -168,21 +164,32 @@ private:
         }
 
         const SampleSynchronizer synchronizer(std::move(features), std::move(horizon), std::move(attitude), std::move(position));
-        const int64_t width = static_cast<int64_t>(_search.parameters().neighbours) * _search.parameters().steps.back();
         SearchResult<int64_t, double> flow_result;
         SearchResult<int64_t, double> horizon_result;
         Estimate flow;
         Estimate horizon_estimate;
         if (flow_ready)
         {
-            flow_result = _search.run([&](int64_t delay_ns) { return _flow_method->fit(synchronizer.get_flow(delay_ns)); });
-            flow = estimate(flow_result, width, _flow_method->degrees_of_freedom(synchronizer.get_flow(flow_result.value).size()));
+            flow_result = _search.run(
+                [&](int64_t delay_ns) -> Evaluation<double>
+                {
+                    const std::vector<FlowSample> samples = synchronizer.get_flow(delay_ns);
+                    return {samples.size(), _flow_method->fit(samples)};
+                },
+                [&](std::size_t samples) { return _flow_method->degrees_of_freedom(samples); });
+            flow = estimate(flow_result);
         }
 
         if (horizon_ready)
         {
-            horizon_result = _search.run([&](int64_t delay_ns) { return _horizon_method->fit(synchronizer.get_horizon(delay_ns)); });
-            horizon_estimate = estimate(horizon_result, width, _horizon_method->degrees_of_freedom(synchronizer.get_horizon(horizon_result.value).size()));
+            horizon_result = _search.run(
+                [&](int64_t delay_ns) -> Evaluation<double>
+                {
+                    const std::vector<HorizonSample> samples = synchronizer.get_horizon(delay_ns);
+                    return {samples.size(), _horizon_method->fit(samples)};
+                },
+                [&](std::size_t samples) { return _horizon_method->degrees_of_freedom(samples); });
+            horizon_estimate = estimate(horizon_result);
         }
 
         const Estimate fused = fuse({flow, horizon_estimate});

@@ -22,12 +22,20 @@ struct SearchParameters
     std::size_t neighbours = 0;
 };
 
+template <typename Cost>
+struct Evaluation
+{
+    std::size_t samples = 0;
+    Cost cost{};
+};
+
 template <typename T, typename Cost>
 struct SearchResult
 {
     T value = 0;
     Cost cost{};
     std::vector<std::pair<T, Cost>> evaluations;
+    std::size_t degrees_of_freedom = 0;
 };
 
 template <typename T, typename Cost>
@@ -37,7 +45,8 @@ class GridSearch
     static_assert(std::is_arithmetic_v<Cost>, "GridSearch requires a numeric cost type");
 
 public:
-    using Evaluate = std::function<Cost(T)>;
+    using Evaluate = std::function<Evaluation<Cost>(T)>;
+    using DegreesOfFreedom = std::function<std::size_t(std::size_t)>;
 
     void setParameters(SearchParameters<T> parameters)
     {
@@ -64,14 +73,14 @@ public:
         return _parameters;
     }
 
-    SearchResult<T, Cost> run(const Evaluate& evaluate) const
+    SearchResult<T, Cost> run(const Evaluate& evaluate, const DegreesOfFreedom& degrees_of_freedom) const
     {
         if (_parameters.steps.empty())
         {
             throw std::logic_error("search parameters are not set");
         }
 
-        std::map<T, Cost> evaluations;
+        std::map<T, Evaluation<Cost>> evaluations;
 
         const auto cost = [&](T value) -> const Cost&
         {
@@ -82,7 +91,7 @@ public:
                 it = evaluations.emplace(value, evaluate(value)).first;
             }
 
-            return it->second;
+            return it->second.cost;
         };
 
         T from = _parameters.min;
@@ -121,7 +130,14 @@ public:
         }
         while (best != centre);
 
-        return {best, evaluations.at(best), {evaluations.begin(), evaluations.end()}};
+        SearchResult<T, Cost> result {best, evaluations.at(best).cost, {}, degrees_of_freedom(evaluations.at(best).samples)};
+
+        for (const auto& [value, evaluation] : evaluations)
+        {
+            result.evaluations.emplace_back(value, evaluation.cost);
+        }
+
+        return result;
     }
 
 private:
