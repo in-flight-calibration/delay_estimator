@@ -39,53 +39,53 @@ public:
           _performance_monitor(std::make_shared<ifc_tools::PerformanceMonitor>("delay_estimator"))
     {
         SearchParameters<int64_t> search;
-        search.min = -declare_parameter<int>("delay.search.max_delay_ms", 500) * 1'000'000LL;
+        search.min = -declare_parameter<int>("delay_estimator.search.max_delay_ms", 500) * 1'000'000LL;
         search.max = 0;
-        search.neighbours = static_cast<std::size_t>(declare_parameter<int>("delay.search.neighbours", 5));
+        search.neighbours = static_cast<std::size_t>(declare_parameter<int>("delay_estimator.search.neighbours", 5));
 
-        for (const int64_t step : declare_parameter<std::vector<int64_t>>("delay.search.steps_ms", {20, 5, 1}))
+        for (const int64_t step : declare_parameter<std::vector<int64_t>>("delay_estimator.search.steps_ms", {20, 5, 1}))
         {
             search.steps.push_back(step * 1'000'000LL);
         }
 
         _search.setParameters(search);
 
-        _features_size = static_cast<std::size_t>(declare_parameter<int>("delay.feature_buffer_size", 300));
-        _horizon_size = static_cast<std::size_t>(declare_parameter<int>("delay.horizon_buffer_size", 300));
+        _features_size = static_cast<std::size_t>(declare_parameter<int>("delay_estimator.feature_buffer_size", 300));
+        _horizon_size = static_cast<std::size_t>(declare_parameter<int>("delay_estimator.horizon_buffer_size", 300));
 
         _attitude = std::make_shared<AttitudeReceiver>(
             "delay_estimator_attitude",
             std::make_shared<AttitudeUtils>(),
-            static_cast<std::size_t>(declare_parameter<int>("delay.attitude_buffer_size", 4000)),
-            declare_parameter<std::string>("delay.attitude_topic", "/fmu/out/vehicle_attitude"));
+            static_cast<std::size_t>(declare_parameter<int>("delay_estimator.attitude_buffer_size", 4000)),
+            declare_parameter<std::string>("autopilot.vehicle_attitude", "/fmu/out/vehicle_attitude"));
 
         _position = std::make_shared<LocalPositionReceiver>(
             "delay_estimator_local_position",
             std::make_shared<LocalPositionUtils>(),
-            static_cast<std::size_t>(declare_parameter<int>("delay.local_position_buffer_size", 2000)),
-            declare_parameter<std::string>("delay.local_position_topic", "/fmu/out/vehicle_local_position"));
+            static_cast<std::size_t>(declare_parameter<int>("delay_estimator.local_position_buffer_size", 2000)),
+            declare_parameter<std::string>("autopilot.vehicle_local_position", "/fmu/out/vehicle_local_position"));
 
         _features = std::make_shared<FeaturesReceiver>(
             "delay_estimator_features",
             std::make_shared<FeaturesUtils>(),
             _features_size,
-            declare_parameter<std::string>("delay.features_topic", "/feature_tracker/features"),
+            declare_parameter<std::string>("feature_tracker.topic", "/feature_tracker/features"),
             rclcpp::ServicesQoS());
 
         _horizon = std::make_shared<HorizonReceiver>(
             "delay_estimator_horizon",
             std::make_shared<HorizonUtils>(),
             _horizon_size,
-            declare_parameter<std::string>("delay.horizon_topic", "/horizon_detection/horizon"),
+            declare_parameter<std::string>("horizon_detection.topic", "/horizon_detection/horizon"),
             rclcpp::ServicesQoS());
 
         _publisher = create_publisher<ifc_msgs::msg::Delay>(
-            declare_parameter<std::string>("delay.topic", "/delay_estimator/delay"), 
+            declare_parameter<std::string>("delay_estimator.topic", "/delay_estimator/delay"), 
             rclcpp::ServicesQoS());
 
-        _debug = declare_parameter<bool>("delay.debug", false);
+        _debug = declare_parameter<bool>("delay_estimator.debug", false);
 
-        if (declare_parameter<bool>("delay.debug_view", false))
+        if (declare_parameter<bool>("delay_estimator.debug_view", false))
         {
             _plot.emplace(cv::Size(640, 320));
             _plot->setAxis(
@@ -103,7 +103,7 @@ public:
             });
         }
 
-        const std::string performance_topic = declare_parameter<std::string>("delay.performance_topic", "/performance/delay_estimator");
+        const std::string performance_topic = declare_parameter<std::string>("delay_estimator.performance_topic", "/delay_estimator/performance");
 
         if (!performance_topic.empty())
         {
@@ -111,7 +111,7 @@ public:
         }
 
         _timer = create_wall_timer(
-            std::chrono::milliseconds(declare_parameter<int>("delay.update_ms", 1000)),
+            std::chrono::milliseconds(declare_parameter<int>("delay_estimator.update_ms", 1000)),
             [this]() { update(); });
     }
 

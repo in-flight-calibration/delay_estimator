@@ -86,13 +86,13 @@ public:
     explicit FlowMethod(const std::string& name, const rclcpp::NodeOptions& options = rclcpp::NodeOptions())
         : rclcpp::Node(name, options)
     {
-        _huber_k = declare_parameter<double>("delay.flow.huber_k", 1.345);
-        _max_iterations = declare_parameter<int>("delay.flow.max_iterations", 20);
-        _ridge = declare_parameter<double>("delay.flow.ridge", 1e-3);
-        _min_samples = static_cast<std::size_t>(declare_parameter<int>("delay.flow.min_samples", 60));
-        _min_excitation = declare_parameter<double>("delay.flow.min_excitation_rad_s", 0.05);
-        _max_cost = declare_parameter<double>("delay.flow.max_cost", 0.5);
-        _expansion = declare_parameter<bool>("delay.flow.expansion", false);
+        _huber_k = declare_parameter<double>("delay_estimator.flow.huber_k", 1.345);
+        _max_iterations = declare_parameter<int>("delay_estimator.flow.max_iterations", 20);
+        _ridge = declare_parameter<double>("delay_estimator.flow.ridge", 1e-3);
+        _min_samples = static_cast<std::size_t>(declare_parameter<int>("delay_estimator.flow.min_samples", 60));
+        _min_excitation = declare_parameter<double>("delay_estimator.flow.min_excitation_rad_s", 0.05);
+        _max_cost = declare_parameter<double>("delay_estimator.flow.max_cost", 0.5);
+        _expansion = declare_parameter<bool>("delay_estimator.flow.expansion", false);
 
         if (_huber_k <= 0.0 || _max_iterations <= 0 || _ridge < 0.0)
         {

@@ -67,11 +67,11 @@ public:
     explicit HorizonMethod(const std::string& name, const rclcpp::NodeOptions& options = rclcpp::NodeOptions())
         : rclcpp::Node(name, options)
     {
-        _huber_k = declare_parameter<double>("delay.horizon.huber_k", 1.345);
-        _max_iterations = declare_parameter<int>("delay.horizon.max_iterations", 50);
-        _min_samples = static_cast<std::size_t>(declare_parameter<int>("delay.horizon.min_samples", 60));
-        _min_excitation = declare_parameter<double>("delay.horizon.min_excitation_rad", 0.02);
-        _max_cost = declare_parameter<double>("delay.horizon.max_cost", 0.5);
+        _huber_k = declare_parameter<double>("delay_estimator.horizon.huber_k", 1.345);
+        _max_iterations = declare_parameter<int>("delay_estimator.horizon.max_iterations", 50);
+        _min_samples = static_cast<std::size_t>(declare_parameter<int>("delay_estimator.horizon.min_samples", 60));
+        _min_excitation = declare_parameter<double>("delay_estimator.horizon.min_excitation_rad", 0.02);
+        _max_cost = declare_parameter<double>("delay_estimator.horizon.max_cost", 0.5);
 
         if (_huber_k <= 0.0 || _max_iterations <= 0)
         {
